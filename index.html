@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Random Quote</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="A simple single-page app that fetches and displays a random quote from quotes.json." />
+  <style>
+    :root {
+      --bg: #0f172a;
+      --panel: #111827;
+      --text: #e5e7eb;
+      --muted: #9ca3af;
+      --accent: #22d3ee;
+      --accent-2: #38bdf8;
+      --btn-bg: #1f2937;
+      --btn-bg-hover: #374151;
+      --shadow: 0 10px 30px rgba(0,0,0,0.35);
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+      background: radial-gradient(1000px 700px at 20% -10%, #111827, transparent), radial-gradient(900px 600px at 120% 120%, #0b1020, transparent), var(--bg);
+      color: var(--text);
+      display: grid;
+      place-items: center;
+      padding: 24px;
+    }
+    .app {
+      width: min(780px, 92vw);
+      background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 16px;
+      padding: 28px 24px;
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(6px);
+    }
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+    h1 {
+      font-size: 1.25rem;
+      letter-spacing: 0.3px;
+      margin: 0;
+      color: #f3f4f6;
+    }
+    .badge {
+      font-size: 0.75rem;
+      color: var(--accent-2);
+      background: rgba(56, 189, 248, 0.12);
+      border: 1px solid rgba(56, 189, 248, 0.35);
+      padding: 4px 10px;
+      border-radius: 999px;
+      white-space: nowrap;
+    }
+    #quote {
+      border-left: 4px solid var(--accent);
+      background: rgba(34, 211, 238, 0.06);
+      color: #e6fbff;
+      padding: 18px 18px 18px 16px;
+      font-size: 1.35rem;
+      line-height: 1.55;
+      border-radius: 10px;
+      min-height: 84px;
+      display: flex;
+      align-items: center;
+    }
+    .controls {
+      display: flex;
+      gap: 10px;
+      margin-top: 16px;
+      flex-wrap: wrap;
+    }
+    button {
+      appearance: none;
+      border: 1px solid rgba(255,255,255,0.12);
+      background: var(--btn-bg);
+      color: var(--text);
+      padding: 10px 14px;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: transform 0.04s ease, background 0.2s ease;
+    }
+    button:hover { background: var(--btn-bg-hover); }
+    button:active { transform: translateY(1px); }
+    button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+    .muted {
+      color: var(--muted);
+      font-size: 0.9rem;
+      margin-top: 8px;
+    }
+    footer {
+      margin-top: 18px;
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    a { color: var(--accent-2); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .sr-only {
+      position: absolute !important;
+      width: 1px; height: 1px;
+      padding: 0; margin: -1px;
+      overflow: hidden; clip: rect(0,0,0,0);
+      white-space: nowrap; border: 0;
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <header>
+      <h1>Random Quote</h1>
+      <span class="badge">quotes.json</span>
+    </header>
+
+    <section aria-labelledby="quote-heading">
+      <h2 id="quote-heading" class="sr-only">Quote</h2>
+      <div id="quote" role="status" aria-live="polite">Loading quote…</div>
+      <div class="controls">
+        <button id="btn-new" type="button" disabled>New quote</button>
+        <button id="btn-copy" type="button" disabled>Copy</button>
+      </div>
+      <p class="muted" id="status" aria-live="polite"></p>
+    </section>
+
+    <footer>
+      <small class="muted">Tip: Serve this folder with a static server to allow fetching the JSON file.</small>
+      <small class="muted">MIT Licensed</small>
+    </footer>
+  </main>
+
+  <script>
+    (function () {
+      const quoteEl = document.getElementById('quote');
+      const btnNew = document.getElementById('btn-new');
+      const btnCopy = document.getElementById('btn-copy');
+      const statusEl = document.getElementById('status');
+
+      /** @type {string[]} */
+      let quotes = [];
+      let lastIndex = -1;
+
+      function sampleRandom(arr) {
+        if (!arr.length) return '';
+        if (arr.length === 1) return arr[0];
+        let idx;
+        do {
+          idx = Math.floor(Math.random() * arr.length);
+        } while (idx === lastIndex);
+        lastIndex = idx;
+        return arr[idx];
+      }
+
+      function normalizeQuotes(data) {
+        // Accept either array of strings or array of objects with 'text'
+        if (Array.isArray(data)) {
+          if (data.every(x => typeof x === 'string')) return data;
+          if (data.every(x => x && typeof x.text === 'string')) return data.map(x => x.text);
+        }
+        return [];
+      }
+
+      function setQuote(text) {
+        quoteEl.textContent = text || 'No quotes available.';
+      }
+
+      async function loadQuotes() {
+        try {
+          // Bust cache during development to always reflect current quotes.json
+          const res = await fetch('quotes.json?ts=' + Date.now(), { cache: 'no-store' });
+          if (!res.ok) throw new Error('Failed to fetch quotes.json (' + res.status + ')');
+          const json = await res.json();
+          quotes = normalizeQuotes(json);
+          if (!quotes.length) throw new Error('quotes.json has no usable quotes');
+          setQuote(sampleRandom(quotes));
+          btnNew.disabled = false;
+          btnCopy.disabled = false;
+          statusEl.textContent = '';
+        } catch (err) {
+          console.error(err);
+          setQuote('Share your knowledge.'); // safe fallback
+          statusEl.textContent = 'Could not load quotes.json. Using a fallback.';
+          btnNew.disabled = true;
+          btnCopy.disabled = false;
+        }
+      }
+
+      btnNew.addEventListener('click', () => {
+        setQuote(sampleRandom(quotes));
+        statusEl.textContent = '';
+      });
+
+      btnCopy.addEventListener('click', async () => {
+        const text = quoteEl.textContent || '';
+        try {
+          await navigator.clipboard.writeText(text);
+          statusEl.textContent = 'Copied to clipboard.';
+        } catch {
+          // Fallback for insecure contexts
+          const ta = document.createElement('textarea');
+          ta.value = text;
+          ta.setAttribute('readonly', '');
+          ta.style.position = 'absolute';
+          ta.style.left = '-9999px';
+          document.body.appendChild(ta);
+          ta.select();
+          try { document.execCommand('copy'); statusEl.textContent = 'Copied to clipboard.'; }
+          catch { statusEl.textContent = 'Copy failed. You can select text manually.'; }
+          finally { document.body.removeChild(ta); }
+        }
+      });
+
+      // Init
+      document.addEventListener('DOMContentLoaded', loadQuotes, { once: true });
+    })();
+  </script>
+</body>
+</html>
